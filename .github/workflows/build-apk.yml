@@ -39,29 +39,28 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release 2>&1 | tee /tmp/release_log.txt; exit ${PIPESTATUS[0]}
 
+      - name: Send APK to Discord
+        if: success()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          SIZE=$(du -sh "$APK" | cut -f1)
+          curl -s -X POST "$DISCORD_WEBHOOK" \
+            -F "content=**nbbang APK 빌드 완료** ✅ (${SIZE})" \
+            -F "file=@${APK};filename=nbbang-release.apk"
+
       - name: Send error to Discord on failure
         if: failure()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           LOG=$(tail -80 /tmp/debug_log.txt /tmp/release_log.txt 2>/dev/null | grep -E "error:|Error|FAILURE|Exception|Caused by" | tail -30 || echo "로그 없음")
-          if [ -n "$DISCORD_WEBHOOK" ]; then
-            curl -s -X POST "$DISCORD_WEBHOOK" \
-              -H "Content-Type: application/json" \
-              -d "{\"content\": \"**nbbang APK 빌드 실패**\n\`\`\`\n$LOG\n\`\`\`\"}"
-          fi
+          curl -s -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": \"**nbbang APK 빌드 실패** ❌\n\`\`\`\n${LOG}\n\`\`\`\"}"
 
-      - name: Upload build logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            /tmp/debug_log.txt
-            /tmp/release_log.txt
-          retention-days: 3
-
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: receipt-splitter-apk
