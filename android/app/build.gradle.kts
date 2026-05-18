@@ -46,3 +46,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Bundle Korean OCR model directly — avoids GMS runtime download failure
+    implementation("com.google.mlkit:text-recognition-korean:16.0.1")
+}
