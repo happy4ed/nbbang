@@ -7,6 +7,7 @@ import 'models/receipt_models.dart';
 import 'state/receipt_controller.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const ProviderScope(child: ReceiptSplitterApp()));
 }
 

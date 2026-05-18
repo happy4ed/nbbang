@@ -13,26 +13,29 @@ class OcrResult {
 }
 
 class OcrService {
-  OcrService({ImagePicker? picker, TextRecognizer? recognizer})
-    : _picker = picker ?? ImagePicker(),
-      _recognizer =
-          recognizer ?? TextRecognizer(script: TextRecognitionScript.korean);
+  OcrService({ImagePicker? picker}) : _picker = picker ?? ImagePicker();
 
   final ImagePicker _picker;
-  final TextRecognizer _recognizer;
+  TextRecognizer? _recognizer;
+
+  TextRecognizer get _getRecognizer {
+    _recognizer ??= TextRecognizer(script: TextRecognitionScript.korean);
+    return _recognizer!;
+  }
 
   Future<OcrResult?> pickAndRead(ImageSource source) async {
     final image = await _picker.pickImage(source: source, imageQuality: 92);
     if (image == null) return null;
 
-    final input = InputImage.fromFile(File(image.path));
-    final recognized = await _recognizer.processImage(input);
+    final input = InputImage.fromFilePath(image.path);
+    final recognized = await _getRecognizer.processImage(input);
     final tokens = <OcrToken>[];
 
     for (final block in recognized.blocks) {
       for (final line in block.lines) {
         for (final element in line.elements) {
           final box = element.boundingBox;
+          if (box == null) continue;
           tokens.add(
             OcrToken(
               text: element.text,
@@ -49,5 +52,8 @@ class OcrService {
     return OcrResult(text: recognized.text, tokens: tokens);
   }
 
-  Future<void> close() => _recognizer.close();
+  Future<void> close() async {
+    await _recognizer?.close();
+    _recognizer = null;
+  }
 }
