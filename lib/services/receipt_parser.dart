@@ -112,14 +112,14 @@ class ReceiptParser {
 
   LineType _classify(String label, String row) {
     final text = '$label $row'.toLowerCase();
-    if (RegExp(r'합계|total|결제대상|총액|받을금액|청구금액').hasMatch(text)) {
+    if (RegExp(r'합계|total|결제대상|총액|받을금액|청구금액|이용금액|승인금액|결제금액').hasMatch(text)) {
       return LineType.payment;
     }
     if (RegExp(r'부가세|vat|tax|세금').hasMatch(text)) return LineType.tax;
     if (RegExp(r'봉사료|service').hasMatch(text)) return LineType.service;
     if (RegExp(r'할인|쿠폰|discount|행사|적립사용').hasMatch(text))
       return LineType.discount;
-    if (RegExp(r'카드|현금|승인|거스름|포인트|전화|사업자|영수증').hasMatch(text)) {
+    if (RegExp(r'카드|현금|승인|거스름|포인트|전화|사업자|영수증|보증금|deposit').hasMatch(text)) {
       return LineType.ignored;
     }
     return LineType.item;

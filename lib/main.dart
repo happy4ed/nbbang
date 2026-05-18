@@ -288,9 +288,32 @@ class ParseReviewScreen extends ConsumerWidget {
             ),
           ),
         if (items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 48),
-            child: Center(child: Text('인식된 항목이 없습니다. + 버튼으로 직접 추가하세요.')),
+          Padding(
+            padding: const EdgeInsets.only(top: 32),
+            child: Column(
+              children: [
+                const Icon(Icons.receipt_long, size: 48, color: Colors.black26),
+                const SizedBox(height: 12),
+                const Text(
+                  '품목을 찾지 못했어요.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '카드 승인전표가 아닌\n메뉴가 나열된 주문 영수증을 촬영해봐요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => ref
+                      .read(receiptControllerProvider.notifier)
+                      .goTo(0),
+                  icon: const Icon(Icons.camera_alt, size: 16),
+                  label: const Text('다시 촬영'),
+                ),
+              ],
+            ),
           ),
         const SizedBox(height: 16),
         _OcrDebugPanel(receipt: state.receipt),
