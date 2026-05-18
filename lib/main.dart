@@ -292,8 +292,144 @@ class ParseReviewScreen extends ConsumerWidget {
             padding: EdgeInsets.only(top: 48),
             child: Center(child: Text('인식된 항목이 없습니다. + 버튼으로 직접 추가하세요.')),
           ),
+        const SizedBox(height: 16),
+        _OcrDebugPanel(receipt: state.receipt),
       ],
     );
+  }
+}
+
+class _OcrDebugPanel extends StatefulWidget {
+  const _OcrDebugPanel({required this.receipt});
+  final Receipt receipt;
+
+  @override
+  State<_OcrDebugPanel> createState() => _OcrDebugPanelState();
+}
+
+class _OcrDebugPanelState extends State<_OcrDebugPanel> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final allItems = widget.receipt.items;
+    return Card(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.bug_report, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'OCR 디버그 (전체 ${allItems.length}줄 / 무시 ${allItems.where((i) => i.lineType == LineType.ignored).length}줄)',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text('전체 파싱 결과', style: Theme.of(context).textTheme.labelMedium),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: widget.receipt.rawText));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('OCR 원문 복사됨')),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.copy, size: 14),
+                        label: const Text('원문 복사'),
+                        style: TextButton.styleFrom(
+                          textStyle: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  for (final item in allItems)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _typeColor(item.lineType).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              item.lineType.label,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: _typeColor(item.lineType),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${item.name}  ${item.total == 0 ? '' : item.total.money}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Text('OCR 원문', style: Theme.of(context).textTheme.labelMedium),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: SelectableText(
+                      widget.receipt.rawText.isEmpty ? '(없음)' : widget.receipt.rawText,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Color _typeColor(LineType type) {
+    return switch (type) {
+      LineType.item => Colors.blue,
+      LineType.tax => Colors.orange,
+      LineType.service => Colors.purple,
+      LineType.discount => Colors.green,
+      LineType.payment => Colors.teal,
+      LineType.ignored => Colors.grey,
+    };
   }
 }
 

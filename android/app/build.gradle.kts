@@ -33,9 +33,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("nbbang-release.keystore")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
-            keyAlias = System.getenv("KEY_ALIAS") ?: ""
-            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            storePassword = "nbbang2026release"
+            keyAlias = "nbbang"
+            keyPassword = "nbbang2026release"
         }
     }
 
