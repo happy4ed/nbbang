@@ -67,8 +67,8 @@ class ReceiptParser {
     final normalized = row.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (normalized.isEmpty) return null;
 
-    // Skip date/time-only rows (e.g. "26.05.08 13:42")
-    if (RegExp(r'^\d{2}[./]\d{2}[./]\d{2}').hasMatch(normalized)) return null;
+    // Skip date/time-only rows (e.g. "26.05.08 13:42", "2026-05-08", "13:42")
+    if (RegExp(r'^\d{2,4}[./-]\d{2}[./-]\d{2}').hasMatch(normalized)) return null;
 
     final hasMoneyAnchor =
         RegExp(r'원|금액|합계|결제|이용|청구|합').hasMatch(normalized);
@@ -83,9 +83,10 @@ class ReceiptParser {
       // Exclude if adjacent to hyphen (phone/card/biz-reg numbers)
       if (start > 0 && normalized[start - 1] == '-') return false;
       if (end < normalized.length && normalized[end] == '-') return false;
-      // Exclude long uncomma'd numbers that lack a money anchor
+      // Exclude 8+ digit uncomma'd numbers (approval codes, biz-reg, card numbers)
+      // unless a money anchor is present. Allows OCR-mangled amounts like "150000".
       final digits = m.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
-      if (digits.length > 5 && !m.group(0)!.contains(',') && !hasMoneyAnchor) {
+      if (digits.length >= 8 && !m.group(0)!.contains(',') && !hasMoneyAnchor) {
         return false;
       }
       return true;
@@ -139,7 +140,7 @@ class ReceiptParser {
     if (RegExp(r'봉사료|service').hasMatch(text)) return LineType.service;
     if (RegExp(r'할인|쿠폰|discount|행사|적립사용').hasMatch(text))
       return LineType.discount;
-    if (RegExp(r'카드|현금|승인|거스름|포인트|전화|사업자|영수증|보증금|deposit|가맹점|대표자|주소|등록번호').hasMatch(text)) {
+    if (RegExp(r'카드|현금|승인|거스름|포인트|전화|tel|사업자|영수증|보증금|deposit|가맹점|대표자|주소|등록번호|판매자|일시').hasMatch(text)) {
       return LineType.ignored;
     }
     return LineType.item;
