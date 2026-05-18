@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,19 +39,59 @@ jobs:
       - name: Build debug APK (diagnostic)
         run: flutter build apk --debug 2>&1 | tee /tmp/debug_log.txt; exit ${PIPESTATUS[0]}
 
-      - name: Build release APK
-        run: flutter build apk --release 2>&1 | tee /tmp/release_log.txt; exit ${PIPESTATUS[0]}
+      - name: Build release APK (arm64)
+        run: flutter build apk --release --target-platform android-arm64 2>&1 | tee /tmp/release_log.txt; exit ${PIPESTATUS[0]}
 
-      - name: Send APK to Discord
+      - name: Publish GitHub Release and notify Discord
         if: success()
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           APK=build/app/outputs/flutter-apk/app-release.apk
           SIZE=$(du -sh "$APK" | cut -f1)
-          curl -s -X POST "$DISCORD_WEBHOOK" \
-            -F "content=**nbbang APK 빌드 완료** ✅ (${SIZE})" \
-            -F "file=@${APK};filename=nbbang-release.apk"
+          SIZE_BYTES=$(stat -c%s "$APK")
+
+          # Upsert 'latest-apk' release
+          RELEASE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/latest-apk")
+          RELEASE_ID=$(echo "$RELEASE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('id',''))" 2>/dev/null)
+
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(curl -s -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases" \
+              -d '{"tag_name":"latest-apk","name":"Latest APK (arm64)","body":"Auto-updated on every push.","prerelease":true}' | \
+              python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          else
+            # Delete old assets
+            curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets" | \
+              python3 -c "import sys,json; [print(a['id']) for a in json.load(sys.stdin)]" | \
+              while read AID; do
+                curl -s -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/${{ github.repository }}/releases/assets/$AID"
+              done
+          fi
+
+          # Upload APK
+          DOWNLOAD_URL=$(curl -s -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=nbbang-release.apk" \
+            --data-binary "@$APK" | python3 -c "import sys,json; print(json.load(sys.stdin).get('browser_download_url',''))")
+
+          # Try to send APK file directly if under 25MB, else send link
+          if [ "$SIZE_BYTES" -lt 26214400 ]; then
+            curl -s -X POST "$DISCORD_WEBHOOK" \
+              -F "content=**nbbang APK 빌드 완료** ✅ (${SIZE})" \
+              -F "file=@${APK};filename=nbbang-release.apk"
+          else
+            curl -s -X POST "$DISCORD_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d "{\"content\": \"**nbbang APK 빌드 완료** ✅ (${SIZE})\n다운로드 (직접 설치): ${DOWNLOAD_URL}\"}"
+          fi
 
       - name: Send error to Discord on failure
         if: failure()
