@@ -368,27 +368,7 @@ class _OcrDebugPanelState extends State<_OcrDebugPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Text('전체 파싱 결과', style: Theme.of(context).textTheme.labelMedium),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: () async {
-                          await Clipboard.setData(ClipboardData(text: widget.receipt.rawText));
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('OCR 원문 복사됨')),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.copy, size: 14),
-                        label: const Text('원문 복사'),
-                        style: TextButton.styleFrom(
-                          textStyle: Theme.of(context).textTheme.labelSmall,
-                        ),
-                      ),
-                    ],
-                  ),
+                  Text('전체 파싱 결과', style: Theme.of(context).textTheme.labelMedium),
                   const SizedBox(height: 4),
                   for (final item in allItems)
                     Padding(
@@ -422,7 +402,32 @@ class _OcrDebugPanelState extends State<_OcrDebugPanel> {
                       ),
                     ),
                   const SizedBox(height: 8),
-                  Text('OCR 원문', style: Theme.of(context).textTheme.labelMedium),
+                  Row(
+                    children: [
+                      Text('OCR 원문', style: Theme.of(context).textTheme.labelMedium),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () async {
+                          final tokenDump = widget.receipt.tokens
+                              .map((t) =>
+                                  '${t.text.padRight(12)} x=${t.left.round()} y=${t.top.round()} w=${t.width.round()}')
+                              .join('\n');
+                          final full = '=== RAW TEXT ===\n${widget.receipt.rawText}\n\n=== TOKENS (text x y w) ===\n$tokenDump';
+                          await Clipboard.setData(ClipboardData(text: full));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('원문 + 토큰 좌표 복사됨')),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.copy_all, size: 14),
+                        label: const Text('전체 복사'),
+                        style: TextButton.styleFrom(
+                          textStyle: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 4),
                   Container(
                     padding: const EdgeInsets.all(8),
@@ -435,6 +440,25 @@ class _OcrDebugPanelState extends State<_OcrDebugPanel> {
                       style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
                     ),
                   ),
+                  if (widget.receipt.tokens.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text('토큰 좌표 (x y 기준)', style: Theme.of(context).textTheme.labelMedium),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: SelectableText(
+                        widget.receipt.tokens
+                            .map((t) =>
+                                '${t.text.padRight(10)} x=${t.left.round().toString().padLeft(4)} y=${t.top.round().toString().padLeft(4)} w=${t.width.round()}')
+                            .join('\n'),
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
