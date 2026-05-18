@@ -23,6 +23,9 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Flutter analyze
+        run: flutter analyze --no-fatal-infos
+
       - name: Install NDK
         run: |
           NDK_VERSION=$(cat $FLUTTER_ROOT/packages/flutter_tools/gradle/src/main/kotlin/com/flutter/gradle/FlutterExtension.kt 2>/dev/null | grep -oP 'ndkVersion.*?"[^"]*"' | grep -oP '"\K[^"]+' | head -1 || echo "27.0.12077973")
@@ -30,12 +33,33 @@ jobs:
           echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;$NDK_VERSION" || \
           echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;27.0.12077973"
 
-      - name: Build APK
-        run: flutter build apk --release --verbose 2>&1 | tee /tmp/build_log.txt; exit ${PIPESTATUS[0]}
+      - name: Build debug APK (diagnostic)
+        run: flutter build apk --debug 2>&1 | tee /tmp/debug_log.txt; exit ${PIPESTATUS[0]}
 
-      - name: Show last build log on failure
+      - name: Build release APK
+        run: flutter build apk --release 2>&1 | tee /tmp/release_log.txt; exit ${PIPESTATUS[0]}
+
+      - name: Send error to Discord on failure
         if: failure()
-        run: tail -200 /tmp/build_log.txt
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          LOG=$(tail -80 /tmp/debug_log.txt /tmp/release_log.txt 2>/dev/null | grep -E "error:|Error|FAILURE|Exception|Caused by" | tail -30 || echo "로그 없음")
+          if [ -n "$DISCORD_WEBHOOK" ]; then
+            curl -s -X POST "$DISCORD_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d "{\"content\": \"**nbbang APK 빌드 실패**\n\`\`\`\n$LOG\n\`\`\`\"}"
+          fi
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            /tmp/debug_log.txt
+            /tmp/release_log.txt
+          retention-days: 3
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
