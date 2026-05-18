@@ -23,8 +23,19 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Install NDK
+        run: |
+          NDK_VERSION=$(cat $FLUTTER_ROOT/packages/flutter_tools/gradle/src/main/kotlin/com/flutter/gradle/FlutterExtension.kt 2>/dev/null | grep -oP 'ndkVersion.*?"[^"]*"' | grep -oP '"\K[^"]+' | head -1 || echo "27.0.12077973")
+          echo "Installing NDK: $NDK_VERSION"
+          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;$NDK_VERSION" || \
+          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;27.0.12077973"
+
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --release --verbose 2>&1 | tee /tmp/build_log.txt; exit ${PIPESTATUS[0]}
+
+      - name: Show last build log on failure
+        if: failure()
+        run: tail -200 /tmp/build_log.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
