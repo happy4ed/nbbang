@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -35,7 +33,6 @@ class OcrService {
       for (final line in block.lines) {
         for (final element in line.elements) {
           final box = element.boundingBox;
-          if (box == null) continue;
           tokens.add(
             OcrToken(
               text: element.text,

@@ -27,7 +27,7 @@ jobs:
         run: flutter pub get
 
       - name: Flutter analyze
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos 2>&1 | tee /tmp/analyze_log.txt; exit ${PIPESTATUS[0]}
 
       - name: Install NDK
         run: |
@@ -98,7 +98,7 @@ jobs:
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
-          LOG=$(tail -80 /tmp/debug_log.txt /tmp/release_log.txt 2>/dev/null | grep -E "error:|Error|FAILURE|Exception|Caused by" | tail -30 || echo "로그 없음")
+          LOG=$(cat /tmp/analyze_log.txt /tmp/debug_log.txt /tmp/release_log.txt 2>/dev/null | grep -E "error:|Error|FAILURE|Exception|Caused by|warning" | tail -30 || echo "로그 없음")
           curl -s -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d "{\"content\": \"**nbbang APK 빌드 실패** ❌\n\`\`\`\n${LOG}\n\`\`\`\"}"
