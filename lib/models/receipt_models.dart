@@ -17,6 +17,7 @@ class OcrToken {
   final double right;
   final double bottom;
 
+  double get centerX => (left + right) / 2;
   double get centerY => (top + bottom) / 2;
   double get width => max(0, right - left);
 }

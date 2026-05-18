@@ -31,26 +31,43 @@ class ReceiptParser {
   }
 
   List<_OcrRow> _rowsFromTokens(List<OcrToken> tokens) {
+    if (tokens.isEmpty) return [];
     final sorted = [...tokens]..sort((a, b) => a.centerY.compareTo(b.centerY));
-    final rows = <List<OcrToken>>[];
 
+    // Adaptive Y tolerance: 70% of median token height, clamped 9–28px.
+    // This handles 2-column receipts where right-column prices have slightly
+    // different vertical positions from left-column item names.
+    final heights = sorted
+        .map((t) => t.bottom - t.top)
+        .where((h) => h > 4)
+        .toList()
+      ..sort();
+    final medianH =
+        heights.isEmpty ? 18.0 : heights[heights.length ~/ 2].toDouble();
+    final yTolerance = (medianH * 0.7).clamp(9.0, 28.0);
+
+    // Group tokens using running mean Y per row for stable assignment.
+    final rows = <_RowAccum>[];
     for (final token in sorted) {
-      final row = rows.cast<List<OcrToken>?>().firstWhere(
-        (candidate) =>
-            candidate != null &&
-            (candidate.first.centerY - token.centerY).abs() <= 9,
-        orElse: () => null,
-      );
-      if (row == null) {
-        rows.add([token]);
+      _RowAccum? best;
+      var bestDist = yTolerance + 1;
+      for (final row in rows) {
+        final dist = (row.meanY - token.centerY).abs();
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = row;
+        }
+      }
+      if (best == null) {
+        rows.add(_RowAccum(token));
       } else {
-        row.add(token);
+        best.add(token);
       }
     }
 
     return rows.map((row) {
-      row.sort((a, b) => a.left.compareTo(b.left));
-      return _OcrRow(row.map((token) => token.text).join(' '));
+      row.tokens.sort((a, b) => a.left.compareTo(b.left));
+      return _OcrRow(row.tokens.map((t) => t.text).join(' '));
     }).toList();
   }
 
@@ -207,6 +224,22 @@ class _OcrRow {
   const _OcrRow(this.text);
 
   final String text;
+}
+
+class _RowAccum {
+  _RowAccum(OcrToken first)
+      : tokens = [first],
+        _sumY = first.centerY;
+
+  final List<OcrToken> tokens;
+  double _sumY;
+
+  double get meanY => _sumY / tokens.length;
+
+  void add(OcrToken t) {
+    tokens.add(t);
+    _sumY += t.centerY;
+  }
 }
 
 class _LineColumns {
