@@ -8,8 +8,14 @@ import 'state/receipt_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    _lastError = details.exceptionAsString();
+  };
   runApp(const ProviderScope(child: ReceiptSplitterApp()));
 }
+
+String? _lastError;
 
 class ReceiptSplitterApp extends StatelessWidget {
   const ReceiptSplitterApp({super.key});
@@ -26,8 +32,66 @@ class ReceiptSplitterApp extends StatelessWidget {
           border: OutlineInputBorder(),
         ),
       ),
-      home: const ReceiptFlowScreen(),
+      home: const _ErrorBoundary(child: ReceiptFlowScreen()),
     );
+  }
+}
+
+class _ErrorBoundary extends StatefulWidget {
+  const _ErrorBoundary({required this.child});
+  final Widget child;
+
+  @override
+  State<_ErrorBoundary> createState() => _ErrorBoundaryState();
+}
+
+class _ErrorBoundaryState extends State<_ErrorBoundary> {
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_lastError != null) _error = _lastError;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('오류 발생')),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('앱 오류가 발생했습니다. 아래 내용을 클로이에게 전달해주세요:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              SelectableText(_error!, style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => setState(() => _error = null),
+                child: const Text('무시하고 계속'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ErrorWidget.builder == ErrorWidget.withDetails
+        ? widget.child
+        : Builder(
+            builder: (context) {
+              ErrorWidget.builder = (details) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) setState(() => _error = details.exceptionAsString());
+                });
+                return const SizedBox.shrink();
+              };
+              return widget.child;
+            },
+          );
   }
 }
 
