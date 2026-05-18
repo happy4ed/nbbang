@@ -22,7 +22,12 @@ class OcrService {
   }
 
   Future<OcrResult?> pickAndRead(ImageSource source) async {
-    final image = await _picker.pickImage(source: source, imageQuality: 92);
+    final image = await _picker.pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1280,
+      maxHeight: 1280,
+    );
     if (image == null) return null;
 
     final input = InputImage.fromFilePath(image.path);
