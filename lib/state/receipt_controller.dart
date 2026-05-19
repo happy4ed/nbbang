@@ -20,6 +20,10 @@ class ReceiptState {
     required this.isScanning,
     required this.error,
     required this.usedLlm,
+    required this.llmStatus,
+    required this.llmRawResponse,
+    required this.llmElapsedMs,
+    required this.llmError,
   });
 
   factory ReceiptState.initial() {
@@ -34,6 +38,10 @@ class ReceiptState {
       isScanning: false,
       error: null,
       usedLlm: false,
+      llmStatus: -1,
+      llmRawResponse: null,
+      llmElapsedMs: 0,
+      llmError: null,
     );
   }
 
@@ -44,6 +52,10 @@ class ReceiptState {
   final bool isScanning;
   final String? error;
   final bool usedLlm;
+  final int llmStatus;
+  final String? llmRawResponse;
+  final int llmElapsedMs;
+  final String? llmError;
 
   ReceiptState copyWith({
     int? step,
@@ -54,6 +66,12 @@ class ReceiptState {
     String? error,
     bool clearError = false,
     bool? usedLlm,
+    int? llmStatus,
+    String? llmRawResponse,
+    bool clearLlmRawResponse = false,
+    int? llmElapsedMs,
+    String? llmError,
+    bool clearLlmError = false,
   }) {
     return ReceiptState(
       step: step ?? this.step,
@@ -63,6 +81,10 @@ class ReceiptState {
       isScanning: isScanning ?? this.isScanning,
       error: clearError ? null : error ?? this.error,
       usedLlm: usedLlm ?? this.usedLlm,
+      llmStatus: llmStatus ?? this.llmStatus,
+      llmRawResponse: clearLlmRawResponse ? null : llmRawResponse ?? this.llmRawResponse,
+      llmElapsedMs: llmElapsedMs ?? this.llmElapsedMs,
+      llmError: clearLlmError ? null : llmError ?? this.llmError,
     );
   }
 
@@ -100,6 +122,11 @@ class ReceiptController extends Notifier<ReceiptState> {
         step: 1,
         isScanning: false,
         usedLlm: parsed.usedLlm,
+        llmStatus: parsed.llmStatus,
+        llmRawResponse: parsed.llmRawResponse,
+        llmElapsedMs: parsed.llmElapsedMs,
+        llmError: parsed.llmError,
+        clearLlmError: parsed.llmError == null,
       );
     } catch (error) {
       state = state.copyWith(
@@ -123,6 +150,10 @@ class ReceiptController extends Notifier<ReceiptState> {
       step: 1,
       clearError: true,
       usedLlm: false,
+      llmStatus: -1,
+      clearLlmRawResponse: true,
+      llmElapsedMs: 0,
+      clearLlmError: true,
     );
   }
 

@@ -4,7 +4,14 @@ import '../models/receipt_models.dart';
 import 'llm_service.dart';
 import 'receipt_parser.dart';
 
-typedef ParseResult = ({Receipt receipt, bool usedLlm});
+typedef ParseResult = ({
+  Receipt receipt,
+  bool usedLlm,
+  int llmStatus,
+  String? llmRawResponse,
+  int llmElapsedMs,
+  String? llmError,
+});
 
 class LlmReceiptParser {
   LlmReceiptParser({required LlmService llm}) : _llm = llm;
@@ -17,29 +24,53 @@ class LlmReceiptParser {
     required List<OcrToken> tokens,
   }) async {
     final fallbackReceipt = _fallback.parse(rawText: rawText, tokens: tokens);
+    final sw = Stopwatch()..start();
+
+    ParseResult _fallbackResult({
+      required int status,
+      String? rawResponse,
+      String? error,
+    }) =>
+        (
+          receipt: fallbackReceipt,
+          usedLlm: false,
+          llmStatus: status,
+          llmRawResponse: rawResponse,
+          llmElapsedMs: sw.elapsedMilliseconds,
+          llmError: error,
+        );
 
     try {
       final status = await _llm.checkStatus();
       if (status != LlmService.statusAvailable) {
-        return (receipt: fallbackReceipt, usedLlm: false);
+        return _fallbackResult(status: status);
       }
 
       final response = await _llm.generateText(_buildPrompt(rawText));
       if (response == null || response.isEmpty) {
-        return (receipt: fallbackReceipt, usedLlm: false);
+        return _fallbackResult(status: status, error: '빈 응답');
       }
 
       final items = _parseResponse(response);
       if (items == null || items.isEmpty) {
-        return (receipt: fallbackReceipt, usedLlm: false);
+        return _fallbackResult(
+          status: status,
+          rawResponse: response,
+          error: 'JSON 파싱 실패',
+        );
       }
 
+      sw.stop();
       return (
         receipt: Receipt(items: items, rawText: rawText, tokens: tokens),
         usedLlm: true,
+        llmStatus: status,
+        llmRawResponse: response,
+        llmElapsedMs: sw.elapsedMilliseconds,
+        llmError: null,
       );
-    } catch (_) {
-      return (receipt: fallbackReceipt, usedLlm: false);
+    } catch (e) {
+      return _fallbackResult(status: -1, error: e.toString());
     }
   }
 

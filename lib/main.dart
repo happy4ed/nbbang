@@ -366,15 +366,34 @@ class ParseReviewScreen extends ConsumerWidget {
             ),
           ),
         const SizedBox(height: 16),
-        _OcrDebugPanel(receipt: state.receipt),
+        _OcrDebugPanel(
+          receipt: state.receipt,
+          usedLlm: state.usedLlm,
+          llmStatus: state.llmStatus,
+          llmRawResponse: state.llmRawResponse,
+          llmElapsedMs: state.llmElapsedMs,
+          llmError: state.llmError,
+        ),
       ],
     );
   }
 }
 
 class _OcrDebugPanel extends StatefulWidget {
-  const _OcrDebugPanel({required this.receipt});
+  const _OcrDebugPanel({
+    required this.receipt,
+    required this.usedLlm,
+    required this.llmStatus,
+    required this.llmRawResponse,
+    required this.llmElapsedMs,
+    required this.llmError,
+  });
   final Receipt receipt;
+  final bool usedLlm;
+  final int llmStatus;
+  final String? llmRawResponse;
+  final int llmElapsedMs;
+  final String? llmError;
 
   @override
   State<_OcrDebugPanel> createState() => _OcrDebugPanelState();
@@ -383,9 +402,24 @@ class _OcrDebugPanel extends StatefulWidget {
 class _OcrDebugPanelState extends State<_OcrDebugPanel> {
   bool _expanded = false;
 
+  String _llmStatusLabel(int status) => switch (status) {
+        0 => '0 UNAVAILABLE',
+        1 => '1 DOWNLOADABLE',
+        2 => '2 DOWNLOADING',
+        3 => '3 AVAILABLE',
+        -1 => '미조회',
+        _ => '$status UNKNOWN',
+      };
+
   @override
   Widget build(BuildContext context) {
     final allItems = widget.receipt.items;
+    final nanoLabel = widget.usedLlm
+        ? '✨ AI 보정 성공 (${widget.llmElapsedMs}ms)'
+        : widget.llmStatus == 3
+            ? '⚠ AVAILABLE인데 파싱 실패'
+            : 'status=${_llmStatusLabel(widget.llmStatus)}';
+
     return Card(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Column(
@@ -401,9 +435,23 @@ class _OcrDebugPanelState extends State<_OcrDebugPanel> {
                   const Icon(Icons.bug_report, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'OCR 디버그 (전체 ${allItems.length}줄 / 무시 ${allItems.where((i) => i.lineType == LineType.ignored).length}줄)',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'OCR 디버그 (전체 ${allItems.length}줄 / 무시 ${allItems.where((i) => i.lineType == LineType.ignored).length}줄)',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        Text(
+                          'Gemini Nano: $nanoLabel',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: widget.usedLlm
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.orange[700],
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
                     ),
                   ),
                   Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18),
@@ -418,6 +466,39 @@ class _OcrDebugPanelState extends State<_OcrDebugPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Gemini Nano 디버그 섹션
+                  Text('Gemini Nano 상태', style: Theme.of(context).textTheme.labelMedium),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: widget.usedLlm
+                          ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4)
+                          : Colors.orange.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _debugRow(context, 'checkStatus()', _llmStatusLabel(widget.llmStatus)),
+                        _debugRow(context, '개입 여부', widget.usedLlm ? '✅ 사용됨' : '❌ 미사용'),
+                        if (widget.llmElapsedMs > 0)
+                          _debugRow(context, '소요 시간', '${widget.llmElapsedMs}ms'),
+                        if (widget.llmError != null)
+                          _debugRow(context, '오류', widget.llmError!),
+                        if (widget.llmRawResponse != null) ...[
+                          const SizedBox(height: 4),
+                          Text('LLM 원본 응답', style: Theme.of(context).textTheme.labelSmall),
+                          const SizedBox(height: 2),
+                          SelectableText(
+                            widget.llmRawResponse!,
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Text('전체 파싱 결과', style: Theme.of(context).textTheme.labelMedium),
                   const SizedBox(height: 4),
                   for (final item in allItems)
@@ -513,6 +594,27 @@ class _OcrDebugPanelState extends State<_OcrDebugPanel> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _debugRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodySmall),
+          ),
         ],
       ),
     );
