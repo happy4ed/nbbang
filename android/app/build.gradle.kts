@@ -24,7 +24,7 @@ android {
         applicationId = "com.example.receipt_splitter"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 21
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -59,4 +59,7 @@ flutter {
 dependencies {
     // Bundle Korean OCR model directly — avoids GMS runtime download failure
     implementation("com.google.mlkit:text-recognition-korean:16.0.1")
+    // Gemini Nano via Android AICore (requires minSdk 26, device must support AICore)
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }

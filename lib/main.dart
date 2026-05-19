@@ -4,10 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'models/receipt_models.dart';
+import 'services/llm_service.dart';
 import 'state/receipt_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Fire-and-forget: triggers Gemini Nano download if needed (no-op on unsupported devices)
+  LlmService().prepareIfNeeded().catchError((_) {});
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     _lastError = details.exceptionAsString();

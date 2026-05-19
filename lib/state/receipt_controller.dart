@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/receipt_models.dart';
+import '../services/llm_receipt_parser.dart';
+import '../services/llm_service.dart';
 import '../services/ocr_service.dart';
 import '../services/receipt_parser.dart';
 import '../services/split_calculator.dart';
@@ -70,6 +72,7 @@ class ReceiptState {
 
 class ReceiptController extends Notifier<ReceiptState> {
   final _parser = ReceiptParser();
+  final _llmParser = LlmReceiptParser(llm: LlmService());
   final _ocr = OcrService();
 
   @override
@@ -83,7 +86,7 @@ class ReceiptController extends Notifier<ReceiptState> {
         state = state.copyWith(isScanning: false);
         return;
       }
-      final receipt = _parser.parse(
+      final receipt = await _llmParser.parse(
         rawText: result.text,
         tokens: result.tokens,
       );
