@@ -263,6 +263,56 @@ class ParseReviewScreen extends ConsumerWidget {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
+            if (state.usedLlm)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.auto_awesome,
+                      size: 14,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'AI 보정됨',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.rule, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      '기본 파서',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             IconButton.filledTonal(
               tooltip: '항목 추가',
               onPressed: () => _openItemEditor(context, ref),

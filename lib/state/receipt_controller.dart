@@ -19,6 +19,7 @@ class ReceiptState {
     required this.assignments,
     required this.isScanning,
     required this.error,
+    required this.usedLlm,
   });
 
   factory ReceiptState.initial() {
@@ -32,6 +33,7 @@ class ReceiptState {
       assignments: {},
       isScanning: false,
       error: null,
+      usedLlm: false,
     );
   }
 
@@ -41,6 +43,7 @@ class ReceiptState {
   final Map<String, Assignment> assignments;
   final bool isScanning;
   final String? error;
+  final bool usedLlm;
 
   ReceiptState copyWith({
     int? step,
@@ -50,6 +53,7 @@ class ReceiptState {
     bool? isScanning,
     String? error,
     bool clearError = false,
+    bool? usedLlm,
   }) {
     return ReceiptState(
       step: step ?? this.step,
@@ -58,6 +62,7 @@ class ReceiptState {
       assignments: assignments ?? this.assignments,
       isScanning: isScanning ?? this.isScanning,
       error: clearError ? null : error ?? this.error,
+      usedLlm: usedLlm ?? this.usedLlm,
     );
   }
 
@@ -86,11 +91,16 @@ class ReceiptController extends Notifier<ReceiptState> {
         state = state.copyWith(isScanning: false);
         return;
       }
-      final receipt = await _llmParser.parse(
+      final parsed = await _llmParser.parse(
         rawText: result.text,
         tokens: result.tokens,
       );
-      state = state.copyWith(receipt: receipt, step: 1, isScanning: false);
+      state = state.copyWith(
+        receipt: parsed.receipt,
+        step: 1,
+        isScanning: false,
+        usedLlm: parsed.usedLlm,
+      );
     } catch (error) {
       state = state.copyWith(
         isScanning: false,
@@ -112,6 +122,7 @@ class ReceiptController extends Notifier<ReceiptState> {
       receipt: _parser.parse(rawText: sample, tokens: const []),
       step: 1,
       clearError: true,
+      usedLlm: false,
     );
   }
 

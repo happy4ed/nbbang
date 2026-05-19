@@ -4,13 +4,15 @@ import '../models/receipt_models.dart';
 import 'llm_service.dart';
 import 'receipt_parser.dart';
 
+typedef ParseResult = ({Receipt receipt, bool usedLlm});
+
 class LlmReceiptParser {
   LlmReceiptParser({required LlmService llm}) : _llm = llm;
 
   final LlmService _llm;
   final _fallback = ReceiptParser();
 
-  Future<Receipt> parse({
+  Future<ParseResult> parse({
     required String rawText,
     required List<OcrToken> tokens,
   }) async {
@@ -18,17 +20,26 @@ class LlmReceiptParser {
 
     try {
       final status = await _llm.checkStatus();
-      if (status != LlmService.statusAvailable) return fallbackReceipt;
+      if (status != LlmService.statusAvailable) {
+        return (receipt: fallbackReceipt, usedLlm: false);
+      }
 
       final response = await _llm.generateText(_buildPrompt(rawText));
-      if (response == null || response.isEmpty) return fallbackReceipt;
+      if (response == null || response.isEmpty) {
+        return (receipt: fallbackReceipt, usedLlm: false);
+      }
 
       final items = _parseResponse(response);
-      if (items == null || items.isEmpty) return fallbackReceipt;
+      if (items == null || items.isEmpty) {
+        return (receipt: fallbackReceipt, usedLlm: false);
+      }
 
-      return Receipt(items: items, rawText: rawText, tokens: tokens);
+      return (
+        receipt: Receipt(items: items, rawText: rawText, tokens: tokens),
+        usedLlm: true,
+      );
     } catch (_) {
-      return fallbackReceipt;
+      return (receipt: fallbackReceipt, usedLlm: false);
     }
   }
 
