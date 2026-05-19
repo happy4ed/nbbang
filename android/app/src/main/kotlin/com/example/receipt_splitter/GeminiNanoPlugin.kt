@@ -14,7 +14,7 @@ import kotlinx.coroutines.withTimeout
 
 class GeminiNanoPlugin(flutterEngine: FlutterEngine) {
 
-    private val client = Generation.getClient()
+    private val client by lazy { Generation.getClient() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
