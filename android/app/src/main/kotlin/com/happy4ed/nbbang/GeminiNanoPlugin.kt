@@ -1,4 +1,4 @@
-package com.example.receipt_splitter
+package com.happy4ed.nbbang
 
 import android.util.Log
 import com.google.mlkit.genai.common.FeatureStatus

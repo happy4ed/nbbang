@@ -1,4 +1,4 @@
-package com.example.receipt_splitter
+package com.happy4ed.nbbang
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
