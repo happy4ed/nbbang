@@ -38,6 +38,26 @@ void main() {
     );
   });
 
+  test('parser reconstructs receipt rows from token columns', () {
+    const tokens = [
+      OcrToken(text: '김밥', left: 10, top: 10, right: 50, bottom: 30),
+      OcrToken(text: '4,000', left: 180, top: 12, right: 230, bottom: 32),
+      OcrToken(text: '라면', left: 10, top: 40, right: 50, bottom: 60),
+      OcrToken(text: '5,000원', left: 180, top: 42, right: 240, bottom: 62),
+      OcrToken(text: '합계', left: 10, top: 70, right: 50, bottom: 90),
+      OcrToken(text: '9,000', left: 180, top: 72, right: 230, bottom: 92),
+    ];
+
+    final receipt = ReceiptParser().parseByTokenColumns(tokens);
+
+    expect(receipt.items, hasLength(3));
+    expect(receipt.items[0].name, '김밥');
+    expect(receipt.items[0].total, 4000);
+    expect(receipt.items[1].name, '라면');
+    expect(receipt.items[1].total, 5000);
+    expect(receipt.items[2].lineType, LineType.payment);
+  });
+
   test(
     'calculator shares unassigned items and allocates adjustments by ratio',
     () {

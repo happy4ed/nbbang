@@ -5,6 +5,20 @@ class ReceiptParser {
     final rows = tokens.isEmpty
         ? _rowsFromText(rawText)
         : _rowsFromTokens(tokens);
+    return _parseRows(rows: rows, rawText: rawText, tokens: tokens);
+  }
+
+  Receipt parseByTokenColumns(List<OcrToken> tokens) {
+    final rows = _rowsFromTokenColumns(tokens);
+    final rawText = rows.map((row) => row.text).join('\n');
+    return _parseRows(rows: rows, rawText: rawText, tokens: tokens);
+  }
+
+  Receipt _parseRows({
+    required List<_OcrRow> rows,
+    required String rawText,
+    required List<OcrToken> tokens,
+  }) {
     final items = <LineItem>[];
     String? pendingName;
 
@@ -32,18 +46,51 @@ class ReceiptParser {
 
   List<_OcrRow> _rowsFromTokens(List<OcrToken> tokens) {
     if (tokens.isEmpty) return [];
+    return _groupTokenRows(tokens).map((row) {
+      row.sort((a, b) => a.left.compareTo(b.left));
+      return _OcrRow(row.map((t) => t.text).join(' '));
+    }).toList();
+  }
+
+  List<_OcrRow> _rowsFromTokenColumns(List<OcrToken> tokens) {
+    if (tokens.isEmpty) return [];
+    return _groupTokenRows(tokens).map((row) {
+      row.sort((a, b) => a.left.compareTo(b.left));
+
+      final amountIndex = _rightmostAmountIndex(row);
+      if (amountIndex <= 0) {
+        return _OcrRow(row.map((t) => t.text).join(' '));
+      }
+
+      final label = row
+          .take(amountIndex)
+          .map((t) => t.text)
+          .join(' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      final amount = _normalizeAmountText(row[amountIndex].text);
+      final trailing = row.skip(amountIndex + 1).map((t) => t.text).join(' ');
+      final text = [
+        label,
+        amount,
+        trailing,
+      ].where((part) => part.trim().isNotEmpty).join(' ').trim();
+      return _OcrRow(text);
+    }).toList();
+  }
+
+  List<List<OcrToken>> _groupTokenRows(List<OcrToken> tokens) {
     final sorted = [...tokens]..sort((a, b) => a.centerY.compareTo(b.centerY));
 
     // Adaptive Y tolerance: 70% of median token height, clamped 9–28px.
     // This handles 2-column receipts where right-column prices have slightly
     // different vertical positions from left-column item names.
-    final heights = sorted
-        .map((t) => t.bottom - t.top)
-        .where((h) => h > 4)
-        .toList()
-      ..sort();
-    final medianH =
-        heights.isEmpty ? 18.0 : heights[heights.length ~/ 2].toDouble();
+    final heights =
+        sorted.map((t) => t.bottom - t.top).where((h) => h > 4).toList()
+          ..sort();
+    final medianH = heights.isEmpty
+        ? 18.0
+        : heights[heights.length ~/ 2].toDouble();
     final yTolerance = (medianH * 0.7).clamp(9.0, 28.0);
 
     // Group tokens using running mean Y per row for stable assignment.
@@ -65,10 +112,7 @@ class ReceiptParser {
       }
     }
 
-    return rows.map((row) {
-      row.tokens.sort((a, b) => a.left.compareTo(b.left));
-      return _OcrRow(row.tokens.map((t) => t.text).join(' '));
-    }).toList();
+    return rows.map((row) => row.tokens).toList();
   }
 
   List<_OcrRow> _rowsFromText(String rawText) {
@@ -85,29 +129,33 @@ class ReceiptParser {
     if (normalized.isEmpty) return null;
 
     // Skip date/time-only rows (e.g. "26.05.08 13:42", "2026-05-08", "13:42")
-    if (RegExp(r'^\d{2,4}[./-]\d{2}[./-]\d{2}').hasMatch(normalized)) return null;
+    if (RegExp(r'^\d{2,4}[./-]\d{2}[./-]\d{2}').hasMatch(normalized)) {
+      return null;
+    }
 
-    final hasMoneyAnchor =
-        RegExp(r'원|금액|합계|결제|이용|청구|합').hasMatch(normalized);
+    final hasMoneyAnchor = RegExp(r'원|금액|합계|결제|이용|청구|합').hasMatch(normalized);
 
     // Filter amount candidates: exclude hyphen-adjacent numbers and
     // uncomma'd numbers > 5 digits unless a money anchor is present.
-    final amountMatches = RegExp(
-      r'[-]?\d[\d,]*(?:\.\d+)?',
-    ).allMatches(normalized).where((m) {
-      final start = m.start;
-      final end = m.end;
-      // Exclude if adjacent to hyphen (phone/card/biz-reg numbers)
-      if (start > 0 && normalized[start - 1] == '-') return false;
-      if (end < normalized.length && normalized[end] == '-') return false;
-      // Exclude 8+ digit uncomma'd numbers (approval codes, biz-reg, card numbers)
-      // unless a money anchor is present. Allows OCR-mangled amounts like "150000".
-      final digits = m.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
-      if (digits.length >= 8 && !m.group(0)!.contains(',') && !hasMoneyAnchor) {
-        return false;
-      }
-      return true;
-    }).toList();
+    final amountMatches = RegExp(r'[-]?\d[\d,]*(?:\.\d+)?')
+        .allMatches(normalized)
+        .where((m) {
+          final start = m.start;
+          final end = m.end;
+          // Exclude if adjacent to hyphen (phone/card/biz-reg numbers)
+          if (start > 0 && normalized[start - 1] == '-') return false;
+          if (end < normalized.length && normalized[end] == '-') return false;
+          // Exclude 8+ digit uncomma'd numbers (approval codes, biz-reg, card numbers)
+          // unless a money anchor is present. Allows OCR-mangled amounts like "150000".
+          final digits = m.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
+          if (digits.length >= 8 &&
+              !m.group(0)!.contains(',') &&
+              !hasMoneyAnchor) {
+            return false;
+          }
+          return true;
+        })
+        .toList();
     if (amountMatches.isEmpty) return null;
 
     final amountText = amountMatches.last.group(0)!;
@@ -155,9 +203,12 @@ class ReceiptParser {
     }
     if (RegExp(r'부가세|vat|tax|세금').hasMatch(text)) return LineType.tax;
     if (RegExp(r'봉사료|service').hasMatch(text)) return LineType.service;
-    if (RegExp(r'할인|쿠폰|discount|행사|적립사용').hasMatch(text))
+    if (RegExp(r'할인|쿠폰|discount|행사|적립사용').hasMatch(text)) {
       return LineType.discount;
-    if (RegExp(r'카드|현금|승인|거스름|포인트|전화|tel|사업자|영수증|보증금|deposit|가맹점|대표자|주소|등록번호|판매자|일시').hasMatch(text)) {
+    }
+    if (RegExp(
+      r'카드|현금|승인|거스름|포인트|전화|tel|사업자|영수증|보증금|deposit|가맹점|대표자|주소|등록번호|판매자|일시',
+    ).hasMatch(text)) {
       return LineType.ignored;
     }
     return LineType.item;
@@ -216,7 +267,29 @@ class ReceiptParser {
   int? _parseMoney(String value) {
     final cleaned = value.replaceAll(',', '');
     final parsed = double.tryParse(cleaned);
-    return parsed == null ? null : parsed.round();
+    return parsed?.round();
+  }
+
+  int _rightmostAmountIndex(List<OcrToken> row) {
+    for (var i = row.length - 1; i >= 0; i--) {
+      if (_looksLikeAmountToken(row[i].text)) return i;
+    }
+    return -1;
+  }
+
+  bool _looksLikeAmountToken(String value) {
+    final normalized = _normalizeAmountText(value);
+    return RegExp(
+      r'^-?\d{1,3}(?:,\d{3})*(?:\.\d+)?$|^-?\d{4,7}$',
+    ).hasMatch(normalized);
+  }
+
+  String _normalizeAmountText(String value) {
+    return value
+        .replaceAll('，', ',')
+        .replaceAll('₩', '')
+        .replaceAll('원', '')
+        .trim();
   }
 }
 
@@ -227,9 +300,7 @@ class _OcrRow {
 }
 
 class _RowAccum {
-  _RowAccum(OcrToken first)
-      : tokens = [first],
-        _sumY = first.centerY;
+  _RowAccum(OcrToken first) : tokens = [first], _sumY = first.centerY;
 
   final List<OcrToken> tokens;
   double _sumY;
