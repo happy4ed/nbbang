@@ -1,7 +1,6 @@
-import 'dart:convert';
-
 import '../models/receipt_models.dart';
 import 'llm_service.dart';
+import 'receipt_layout_classifier.dart';
 import 'receipt_parser.dart';
 
 typedef ParseResult = ({
@@ -18,6 +17,7 @@ class LlmReceiptParser {
 
   final LlmService _llm;
   final _fallback = ReceiptParser();
+  late final _classifier = ReceiptLayoutClassifier(llm: _llm);
 
   Future<ParseResult> parse({
     required String rawText,
@@ -48,13 +48,10 @@ class LlmReceiptParser {
       int status = await _llm.checkStatus();
 
       if (status == LlmService.statusDownloadable) {
-        // Trigger download and wait; re-check once done
         try {
           await _llm.prepareIfNeeded();
           status = await _llm.checkStatus();
-        } catch (_) {
-          // download failed; fall through to fallback below
-        }
+        } catch (_) {}
       }
 
       if (status == LlmService.statusUnavailable) {
@@ -81,31 +78,34 @@ class LlmReceiptParser {
         );
       }
 
-      final response = await _llm.generateText(_buildPrompt(rawText));
-      if (response == null || response.isEmpty) {
+      final classification =
+          tokens.isEmpty ? null : await _classifier.classify(tokens);
+
+      if (classification == null || !classification.isConfident) {
+        final reason = classification == null
+            ? '레이아웃 분류 실패'
+            : '낮은 신뢰도 (${classification.confidence.toStringAsFixed(2)})'
+                '${classification.fallbackReason != null ? ": ${classification.fallbackReason}" : ""}';
         return fallbackResult(
           status: status,
           receipt: tokenColumnFallbackReceipt(),
-          error: '빈 응답',
+          error: reason,
         );
       }
 
-      final items = _parseResponse(response);
-      if (items == null || items.isEmpty) {
-        return fallbackResult(
-          status: status,
-          receipt: tokenColumnFallbackReceipt(),
-          rawResponse: response,
-          error: 'JSON 파싱 실패',
-        );
-      }
+      final receipt = _routeByLayout(
+        classification: classification,
+        rawText: rawText,
+        tokens: tokens,
+      );
 
       sw.stop();
       return (
-        receipt: Receipt(items: items, rawText: rawText, tokens: tokens),
+        receipt: receipt,
         usedLlm: true,
         llmStatus: status,
-        llmRawResponse: response,
+        llmRawResponse:
+            '{"layoutType":"${classification.layoutType.name}","confidence":${classification.confidence.toStringAsFixed(2)}}',
         llmElapsedMs: sw.elapsedMilliseconds,
         llmError: null,
       );
@@ -118,55 +118,25 @@ class LlmReceiptParser {
     }
   }
 
-  String _buildPrompt(String rawText) =>
-      '다음은 한국 영수증 OCR 텍스트입니다. JSON으로 파싱하세요.\n\n'
-      'OCR:\n$rawText\n\n'
-      'type 값: item(품목) tax(부가세) service(봉사료) discount(할인, 음수금액) '
-      'payment(합계/결제) ignored(카드/승인 등 무관)\n'
-      'qty 기본값 1, unitPrice 없으면 total과 동일\n\n'
-      'JSON 형식만 출력:\n'
-      '{"items":[{"name":"","qty":1,"unitPrice":0,"total":0,"type":"item"}]}';
-
-  List<LineItem>? _parseResponse(String response) {
-    try {
-      var json = response
-          .trim()
-          .replaceAll(RegExp(r'^```[a-z]*\n?', multiLine: true), '')
-          .replaceAll(RegExp(r'\n?```$', multiLine: true), '');
-      final start = json.indexOf('{');
-      final end = json.lastIndexOf('}');
-      if (start < 0 || end <= start) return null;
-      json = json.substring(start, end + 1);
-
-      final decoded = jsonDecode(json) as Map<String, dynamic>;
-      final rawItems = decoded['items'] as List<dynamic>?;
-      if (rawItems == null || rawItems.isEmpty) return null;
-
-      return rawItems.asMap().entries.map((entry) {
-        final i = entry.key;
-        final m = entry.value as Map<String, dynamic>;
-        final total = (m['total'] as num? ?? 0).toInt();
-        final unitPrice = (m['unitPrice'] as num? ?? total).toInt();
-        return LineItem(
-          id: 'llm_$i',
-          name: m['name'] as String? ?? '',
-          qty: (m['qty'] as num? ?? 1).toDouble(),
-          unitPrice: unitPrice,
-          total: total,
-          lineType: _parseType((m['type'] as String? ?? 'item').toLowerCase()),
-        );
-      }).toList();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  LineType _parseType(String s) => switch (s) {
-    'tax' => LineType.tax,
-    'service' => LineType.service,
-    'discount' => LineType.discount,
-    'payment' => LineType.payment,
-    'ignored' => LineType.ignored,
-    _ => LineType.item,
+  Receipt _routeByLayout({
+    required LayoutClassification classification,
+    required String rawText,
+    required List<OcrToken> tokens,
+  }) => switch (classification.layoutType) {
+    LayoutType.col2NamePrice => tokens.isEmpty
+        ? _fallback.parse(rawText: rawText, tokens: tokens)
+        : _fallback.parseByTokenColumns(tokens),
+    LayoutType.col1Inline =>
+      _fallback.parse(rawText: rawText, tokens: tokens),
+    LayoutType.col3QtyNamePrice => _parseThreeColumn(rawText, tokens),
+    LayoutType.unknown => tokens.isEmpty
+        ? _fallback.parse(rawText: rawText, tokens: tokens)
+        : _fallback.parseByTokenColumns(tokens),
   };
+
+  // Stub: 3-column (qty + name + price) parser — Phase 2 implementation
+  Receipt _parseThreeColumn(String rawText, List<OcrToken> tokens) =>
+      tokens.isEmpty
+          ? _fallback.parse(rawText: rawText, tokens: tokens)
+          : _fallback.parseByTokenColumns(tokens);
 }
