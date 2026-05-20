@@ -41,7 +41,29 @@ class LlmReceiptParser {
         );
 
     try {
-      final status = await _llm.checkStatus();
+      int status = await _llm.checkStatus();
+
+      if (status == LlmService.statusDownloadable) {
+        // Trigger download and wait; re-check once done
+        try {
+          await _llm.prepareIfNeeded();
+          status = await _llm.checkStatus();
+        } catch (_) {
+          // download failed; fall through to fallback below
+        }
+      }
+
+      if (status == LlmService.statusUnavailable) {
+        return _fallbackResult(
+          status: status,
+          error: 'AICore 미초기화 — 설정 > 개발자 옵션 > AICore Settings > Enable on-device GenAI Features 확인 후 재부팅',
+        );
+      }
+
+      if (status == LlmService.statusDownloading) {
+        return _fallbackResult(status: status, error: 'AI 모델 다운로드 중 — 잠시 후 다시 시도');
+      }
+
       if (status != LlmService.statusAvailable) {
         return _fallbackResult(status: status);
       }
