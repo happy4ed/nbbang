@@ -23,22 +23,26 @@ class LlmReceiptParser {
     required String rawText,
     required List<OcrToken> tokens,
   }) async {
-    final fallbackReceipt = _fallback.parse(rawText: rawText, tokens: tokens);
+    Receipt fallbackReceipt() =>
+        _fallback.parse(rawText: rawText, tokens: tokens);
+    Receipt tokenColumnFallbackReceipt() => tokens.isEmpty
+        ? fallbackReceipt()
+        : _fallback.parseByTokenColumns(tokens);
     final sw = Stopwatch()..start();
 
-    ParseResult _fallbackResult({
+    ParseResult fallbackResult({
       required int status,
       String? rawResponse,
       String? error,
-    }) =>
-        (
-          receipt: fallbackReceipt,
-          usedLlm: false,
-          llmStatus: status,
-          llmRawResponse: rawResponse,
-          llmElapsedMs: sw.elapsedMilliseconds,
-          llmError: error,
-        );
+      Receipt? receipt,
+    }) => (
+      receipt: receipt ?? fallbackReceipt(),
+      usedLlm: false,
+      llmStatus: status,
+      llmRawResponse: rawResponse,
+      llmElapsedMs: sw.elapsedMilliseconds,
+      llmError: error,
+    );
 
     try {
       int status = await _llm.checkStatus();
@@ -54,29 +58,43 @@ class LlmReceiptParser {
       }
 
       if (status == LlmService.statusUnavailable) {
-        return _fallbackResult(
+        return fallbackResult(
           status: status,
-          error: 'AICore 미초기화 — 설정 > 개발자 옵션 > AICore Settings > Enable on-device GenAI Features 확인 후 재부팅',
+          receipt: tokenColumnFallbackReceipt(),
+          error:
+              'AICore 미초기화 — 설정 > 개발자 옵션 > AICore Settings > Enable on-device GenAI Features 확인 후 재부팅',
         );
       }
 
       if (status == LlmService.statusDownloading) {
-        return _fallbackResult(status: status, error: 'AI 모델 다운로드 중 — 잠시 후 다시 시도');
+        return fallbackResult(
+          status: status,
+          receipt: tokenColumnFallbackReceipt(),
+          error: 'AI 모델 다운로드 중 — 잠시 후 다시 시도',
+        );
       }
 
       if (status != LlmService.statusAvailable) {
-        return _fallbackResult(status: status);
+        return fallbackResult(
+          status: status,
+          receipt: tokenColumnFallbackReceipt(),
+        );
       }
 
       final response = await _llm.generateText(_buildPrompt(rawText));
       if (response == null || response.isEmpty) {
-        return _fallbackResult(status: status, error: '빈 응답');
+        return fallbackResult(
+          status: status,
+          receipt: tokenColumnFallbackReceipt(),
+          error: '빈 응답',
+        );
       }
 
       final items = _parseResponse(response);
       if (items == null || items.isEmpty) {
-        return _fallbackResult(
+        return fallbackResult(
           status: status,
+          receipt: tokenColumnFallbackReceipt(),
           rawResponse: response,
           error: 'JSON 파싱 실패',
         );
@@ -92,7 +110,11 @@ class LlmReceiptParser {
         llmError: null,
       );
     } catch (e) {
-      return _fallbackResult(status: -1, error: e.toString());
+      return fallbackResult(
+        status: -1,
+        receipt: tokenColumnFallbackReceipt(),
+        error: e.toString(),
+      );
     }
   }
 
@@ -140,11 +162,11 @@ class LlmReceiptParser {
   }
 
   LineType _parseType(String s) => switch (s) {
-        'tax' => LineType.tax,
-        'service' => LineType.service,
-        'discount' => LineType.discount,
-        'payment' => LineType.payment,
-        'ignored' => LineType.ignored,
-        _ => LineType.item,
-      };
+    'tax' => LineType.tax,
+    'service' => LineType.service,
+    'discount' => LineType.discount,
+    'payment' => LineType.payment,
+    'ignored' => LineType.ignored,
+    _ => LineType.item,
+  };
 }
